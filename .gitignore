@@ -8,5 +8,8 @@ desktop.ini
 .vscode/
 .idea/
 
-# Claude Code のローカル設定（マシン固有なので含めない）
+# ローカル作業用・公開しないファイル
 .claude/
+CLAUDE.md
+docs/design-session-brief.md
+docs/企画引き継ぎ書.md

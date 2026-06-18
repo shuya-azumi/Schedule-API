@@ -354,9 +354,12 @@ function appendMessage(m) {
 function renderInfo() {
   $("#main-title").text(info.title || "面接 日程調整");
   if (info.status === "confirmed" && info.confirmedSlotId && slots[info.confirmedSlotId]) {
+    const confirmedSlot = slots[info.confirmedSlotId];
     $("#confirmed-banner")
-      .text("確定：" + slots[info.confirmedSlotId].label)
+      .html('確定：' + escapeHtml(confirmedSlot.label) +
+        ' <button id="ics-btn" class="banner-btn">カレンダーに追加（.ics）</button>')
       .removeClass("hidden");
+    $("#ics-btn").on("click", () => downloadICS(confirmedSlot));
   } else {
     $("#confirmed-banner").addClass("hidden");
   }
@@ -405,6 +408,60 @@ function formatSlotLabel(date, start, end) {
 function onValueOnce(r, cb) {
   const unsub = onValue(r, (snap) => { cb(snap.val()); unsub(); });
 }
+// ========== .ics カレンダー書き出し ==========
+function buildICS(slot) {
+  function toICSDate(iso) {
+    if (!iso) return "";
+    const [d, t] = iso.split("T");
+    const [y, mo, da] = d.split("-");
+    const [h, mi] = (t || "00:00").split(":");
+    return `${y}${mo}${da}T${h}${mi}00`;
+  }
+  const start = toICSDate(slot.start);
+  let endIso = slot.end;
+  if (!endIso) {
+    const dt = new Date(slot.start);
+    dt.setHours(dt.getHours() + 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    endIso = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  }
+  const end = toICSDate(endIso);
+  const uid = `${start}-${Math.random().toString(36).slice(2)}@scheduler`;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}T${pad(now.getHours())}${pad(now.getMinutes())}00`;
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//scheduler//interview//JP",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=Asia/Tokyo:${start}`,
+    `DTEND;TZID=Asia/Tokyo:${end}`,
+    "SUMMARY:面接",
+    `DESCRIPTION:面接日程（${slot.label || ""}）`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  return lines.join("\r\n");
+}
+
+function downloadICS(slot) {
+  const ics = buildICS(slot);
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "interview.ics";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // XSS対策：入力文字をそのままHTMLに入れない
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>

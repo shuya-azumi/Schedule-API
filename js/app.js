@@ -357,8 +357,10 @@ function renderInfo() {
     const confirmedSlot = slots[info.confirmedSlotId];
     $("#confirmed-banner")
       .html('確定：' + escapeHtml(confirmedSlot.label) +
+        ' <button id="gcal-btn" class="banner-btn">Googleカレンダーに追加</button>' +
         ' <button id="ics-btn" class="banner-btn">カレンダーに追加（.ics）</button>')
       .removeClass("hidden");
+    $("#gcal-btn").on("click", () => handleAddToGoogleCalendar(confirmedSlot));
     $("#ics-btn").on("click", () => downloadICS(confirmedSlot));
   } else {
     $("#confirmed-banner").addClass("hidden");
@@ -408,6 +410,98 @@ function formatSlotLabel(date, start, end) {
 function onValueOnce(r, cb) {
   const unsub = onValue(r, (snap) => { cb(snap.val()); unsub(); });
 }
+// ========== Google Calendar API 連携 ==========
+const GCAL_CLIENT_ID = '11052609379-mn1aiiq0ef957tucjuc1s74abaklso6t.apps.googleusercontent.com';
+const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';
+
+let tokenClient = null;
+let gcalAccessToken = null;
+
+function initGoogleCalendar() {
+  if (typeof google === 'undefined' || !google.accounts) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GCAL_CLIENT_ID,
+    scope: GCAL_SCOPE,
+    callback: (tokenResponse) => {
+      if (tokenResponse.error) {
+        console.error('Google認証エラー:', tokenResponse.error);
+        return;
+      }
+      gcalAccessToken = tokenResponse.access_token;
+      addToGoogleCalendarWithToken();
+    },
+  });
+}
+
+function handleAddToGoogleCalendar(slot) {
+  window._pendingCalendarSlot = slot;
+  if (!tokenClient) {
+    alert('Google Calendar の準備ができていません。少し待ってから再度お試しください。');
+    return;
+  }
+  if (gcalAccessToken) {
+    addToGoogleCalendarWithToken();
+  } else {
+    tokenClient.requestAccessToken({ prompt: 'consent' });
+  }
+}
+
+function addToGoogleCalendarWithToken() {
+  const slot = window._pendingCalendarSlot;
+  if (!slot || !gcalAccessToken) return;
+
+  function toRFC3339(iso) {
+    return iso.length === 16 ? iso + ':00+09:00' : iso + '+09:00';
+  }
+
+  let endIso = slot.end;
+  if (!endIso) {
+    const dt = new Date(slot.start + ':00+09:00');
+    dt.setHours(dt.getHours() + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    endIso = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  }
+
+  const event = {
+    summary: '面接',
+    description: `面接日程（${slot.label || ''}）`,
+    start: { dateTime: toRFC3339(slot.start), timeZone: 'Asia/Tokyo' },
+    end:   { dateTime: toRFC3339(endIso),     timeZone: 'Asia/Tokyo' },
+  };
+
+  fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${gcalAccessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(event),
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.id) {
+      alert('Googleカレンダーに面接予定を追加しました！');
+    } else {
+      console.error('Calendar API エラー:', data);
+      alert('カレンダーへの追加に失敗しました。もう一度お試しください。');
+      gcalAccessToken = null;
+    }
+  })
+  .catch(err => {
+    console.error('通信エラー:', err);
+    alert('通信エラーが発生しました。');
+  });
+}
+
+window.addEventListener('load', () => {
+  const waitForGIS = setInterval(() => {
+    if (typeof google !== 'undefined' && google.accounts) {
+      clearInterval(waitForGIS);
+      initGoogleCalendar();
+    }
+  }, 300);
+});
+
 // ========== .ics カレンダー書き出し ==========
 function buildICS(slot) {
   function toICSDate(iso) {

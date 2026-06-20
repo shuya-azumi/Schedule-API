@@ -265,23 +265,22 @@ header strong {
   padding: 13px var(--s5);
   text-align: center;
 }
-/* バナー内の「カレンダーに追加」ボタン（白抜き）*/
+/* バナー内の「Googleカレンダーに追加」ボタン */
 .banner-btn {
   margin-left: var(--s3);
   padding: 5px 13px;
-  border: 1px solid rgba(255,255,255,.4);
+  border: none;
   border-radius: var(--r);
-  background: transparent;
+  background: #1a73e8;
   color: #fff;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background .15s, border-color .15s;
+  transition: background .15s;
   vertical-align: middle;
 }
 .banner-btn:hover {
-  background: rgba(255,255,255,.12);
-  border-color: rgba(255,255,255,.65);
+  background: #1765cc;
 }
 
 .layout {
